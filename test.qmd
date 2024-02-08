@@ -1,0 +1,166 @@
+---
+title: Teste de Script de Scraing de Condutores Habilitados
+editor: source
+---
+
+## Primeira tentativa
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(tools)
+library(readxl)
+```
+
+```{r}
+page <- "https://www.gov.br/transportes/pt-br/assuntos/transito/conteudo-Senatran/estatisticas-quantidade-de-habilitados-denatran"
+
+links <- read_html(page) |> 
+  html_elements(".internal-link") |> 
+  html_attr("href") |> 
+  Filter(f = function(l) {grepl("condutores.*12",l) & file_ext(l) == "csv"})
+
+links
+```
+
+```{r}
+df <- read.csv(links[1], fileEncoding = "UTF-16LE") |> 
+  mutate(ano = as.numeric(str_extract(links[1],"\\d{4}")))
+
+colnames(df) <- c("regiao","uf","sexo","faixa_etaria","categoria","condutores","ano")
+
+df
+```
+
+```{r}
+is.na(df) |> colSums()
+```
+
+```{r}
+read_drivers <- function(file) {
+  df <- read.csv(file, fileEncoding = "UTF-16LE")
+  colnames(df) <- c("regiao","uf","sexo","faixa_etaria",
+                    "categoria","condutores")
+  
+  return(mutate(df, ano = as.numeric(str_extract(file,"\\d{4}"))))
+}
+```
+
+```{r}
+read.csv(links[10], fileEncoding = "UTF-16LE")
+```
+
+## Segunda tentativa
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(tools)
+library(readxl)
+
+page <- "https://www.gov.br/transportes/pt-br/assuntos/transito/conteudo-Senatran/estatisticas-quantidade-de-habilitados-denatran"
+
+xl_links <- read_html(page) |> 
+  html_elements(".internal-link") |> 
+  html_attr("href") |> 
+  Filter(
+    f = function(l) {
+      grepl("condutores.*12",l) & file_ext(l) %in% c("xls","xlsx")
+    }
+  )
+
+xl_links
+```
+
+```{r}
+url <- xl_links[1]
+
+temp <- tempfile(fileext = ".xlsx")
+download.file(url, temp, mode = "wb")
+
+row <- read_excel(temp, sheet = 1, range = cell_cols("S:"))
+
+if(!("Total" %in% colnames(row))) {
+  row <- read_excel(temp, sheet = 1, range = cell_cols("N:"))
+}
+
+row <- row |> 
+  filter(Total == last(Total)) |> 
+  rename(drivers = Total) |> 
+  mutate(ano = str_extract(url, "[12][0-9]{3}"))
+
+unlink(temp)
+
+row
+```
+
+```{r}
+read_driver_url <- function(url) {
+  # creates and downloads tempfile
+  temp <- tempfile(fileext = ".xlsx")
+  download.file(url, temp, mode = "wb", quiet = T)
+  # reads sheet conditionally
+  row <- read_excel(temp, sheet = 1, range = cell_cols("S:"))
+  if(!("Total" %in% colnames(row))) {
+    row <- read_excel(temp, sheet = 1, range = cell_cols("N:"))
+  }
+  # filters total drivers row and year
+  row <- row |> 
+    filter(Total == last(Total)) |> 
+    rename(drivers = Total) |> 
+    mutate(year = str_extract(url, "[12][0-9]{3}"))
+  # deletes tempfile
+  unlink(temp)
+  
+  return(row)
+}
+
+read_driver_url(xl_links[13])
+```
+```{r}
+reduce(lapply(xl_links, read_driver_url), bind_rows)
+```
+
+```{r}
+read_driverrs <- function() {
+  # source page link
+  page <- "https://www.gov.br/transportes/pt-br/assuntos/transito/conteudo-Senatran/estatisticas-quantidade-de-habilitados-denatran"
+  # scraping urls of interest
+  xl_links <- read_html(page) |> 
+    html_elements(".internal-link") |> 
+    html_attr("href") |> 
+    Filter(
+      f = function(l) {
+        grepl("condutores.*12",l) & file_ext(l) %in% c("xls","xlsx")
+      }
+    )
+  
+  # create url reading function
+  read_driver_url <- function(url) {
+    # creates and downloads tempfile
+    temp <- tempfile(fileext = ".xlsx")
+    download.file(url, temp, mode = "wb", quiet = T)
+    # reads sheet conditionally
+    row <- read_excel(temp, sheet = 1, range = cell_cols("S:"))
+    if(!("Total" %in% colnames(row))) {
+      row <- read_excel(temp, sheet = 1, range = cell_cols("N:"))
+    }
+    # filters total drivers row and year
+    row <- row |> 
+      filter(Total == last(Total)) |> 
+      rename(drivers = Total) |> 
+      mutate(year = str_extract(url, "[12][0-9]{3}"))
+    # deletes tempfile
+    unlink(temp)
+    
+    return(row)
+  }
+  # return reduced list of data
+  return(reduce(lapply(xl_links, read_driver_url), bind_rows))
+}
+```
+
+```{r}
+read_driverrs()
+```
+
