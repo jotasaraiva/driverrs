@@ -73,6 +73,32 @@ xl_links
 ```
 
 ```{r}
+url <- xl_links[13]
+
+temp <- tempfile(fileext = ".xlsx")
+download.file(url, temp, mode = "wb")
+
+url
+
+df <- 
+  read_excel(
+    temp, sheet = 1, range = cell_cols(c("B",NA)), 
+    .name_repair = "universal"
+  ) |> 
+  slice(-1) |> 
+  rename_with(~ tolower(word(., 1, sep = "\\."))) |> 
+  filter(if_all(everything(), ~ !grepl("Total", . ))) |> 
+  mutate(across("a":"total", ~ as.numeric( . )),
+         ano = str_sub(url, -12, -9)) |> 
+  fill("uf", "sexo")
+  
+df |> view()
+
+unlink(temp)
+```
+
+
+```{r}
 url <- xl_links[1]
 
 temp <- tempfile(fileext = ".xlsx")
@@ -163,4 +189,3 @@ read_driverrs <- function() {
 ```{r}
 read_driverrs()
 ```
-
