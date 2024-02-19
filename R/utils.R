@@ -1,15 +1,15 @@
 get_drivers_links <- function() {
   page <- "https://www.gov.br/transportes/pt-br/assuntos/transito/conteudo-Senatran/estatisticas-quantidade-de-habilitados-denatran"
 
-  xl_links <- rvest::read_html(page) |> 
-    rvest::html_elements(".internal-link") |> 
-    rvest::html_attr("href") |> 
+  xl_links <- rvest::read_html(page) |>
+    rvest::html_elements(".internal-link") |>
+    rvest::html_attr("href") |>
     Filter(
       f = function(l) {
         grepl("condutores.*12",l) & tools::file_ext(l) %in% c("xls","xlsx")
       }
     )
-  
+
   return(xl_links)
 }
 
@@ -21,7 +21,7 @@ get_region <- function(acronyms) {
     "Sudeste" = c("ES", "MG", "RJ", "SP"),
     "Sul" = c("PR", "RS", "SC")
   )
-  
+
   region <- sapply(acronyms, function(acronym) {
     for (r in names(region_map)) {
       if (acronym %in% region_map[[r]]) {
@@ -30,7 +30,7 @@ get_region <- function(acronyms) {
     }
     return("Not found")
   })
-  
+
   return(region)
 }
 
@@ -48,7 +48,7 @@ brazil_states_acronym <- function(df) {
       "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"
     )
   )
-  
+
   for(i in 1:length(df$uf)) {
     for(j in 1:length(brazil_states_df$State)) {
       if(df$uf[i] == brazil_states_df$State[j] & !is.na(df$uf[i])) {
@@ -56,49 +56,35 @@ brazil_states_acronym <- function(df) {
       }
     }
   }
-  
+
   return(df)
 }
 
 read_drivers_url <- function(url) {
   temp <- tempfile(fileext = ".xlsx")
   utils::download.file(url, temp, mode = "wb", quiet = T)
-  
+
   suppressMessages({
-    df <- 
+    df <-
       readxl::read_excel(
         temp, sheet = 1, range = readxl::cell_cols(c("B",NA)),
         .name_repair = "universal"
-      ) |> 
-      dplyr::slice(-1) |> 
-      dplyr::rename_with(~ tolower(stringr::word(., 1, sep = "\\."))) |> 
-      dplyr::filter(dplyr::if_all(dplyr::everything(), ~ !grepl("Total", .))) |> 
-      dplyr::rename("faixa_etaria" = "categoria") |> 
+      ) |>
+      dplyr::slice(-1) |>
+      dplyr::rename_with(~ tolower(stringr::word(., 1, sep = "\\."))) |>
+      dplyr::filter(dplyr::if_all(dplyr::everything(), ~ !grepl("Total", .))) |>
+      dplyr::rename("faixa_etaria" = "categoria") |>
       dplyr::mutate(
         dplyr::across("a":"total", ~ as.numeric( .)),
         ano = as.integer(stringr::str_extract(url, "[12][0-9]{3}"))
-      ) |> 
-      tidyr::fill("uf", "sexo") |> 
-      tidyr::drop_na(faixa_etaria) |> 
-      dplyr::mutate(faixa_etaria = forcats::as_factor(faixa_etaria)) |> 
+      ) |>
+      tidyr::fill("uf", "sexo") |>
+      tidyr::drop_na(faixa_etaria) |>
+      dplyr::mutate(faixa_etaria = forcats::as_factor(faixa_etaria)) |>
       brazil_states_acronym()
   })
-  
-  unlink(temp)
-  
-  return(df)
-}
 
-read_drivers <- function() {
-  urls <- get_drivers_links()
-  
-  dfs <- 
-    lapply(urls, read_drivers_url) |>
-    purrr::reduce(dplyr::bind_rows) |> 
-    dplyr::arrange(ano) |> 
-    dplyr::rename_with(~ paste0("categoria_", .), 
-                       -c(uf, sexo, faixa_etaria, total, ano)) |> 
-    dplyr::mutate(regiao = get_region(uf), .before = 1)
-  
-  return(dfs)
+  unlink(temp)
+
+  return(df)
 }
